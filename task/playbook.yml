@@ -1,0 +1,47 @@
+---
+- name: Add hosts
+  hosts: localhost
+  tasks:
+  - name: Add Host target
+    add_host:
+      name: target
+      ansible_host: "{{ newhost }}"
+      ansible_user: root
+      ansible_ssh_pass: "{{ defaultpass }}"
+      ansible_ssh_extra_args: '-o StrictHostKeyChecking=no'
+- name: Prepare
+  hosts: target
+  become: yes
+  tasks:
+  - name: Partition Info
+    delegate_to: target
+    community.general.parted:
+      device: /dev/vda
+      number: 2
+    register: partinfo
+  - name: calculate gap after partition
+    delegate_to: target
+    set_fact:
+      gap_kb: "{{partinfo.disk.size - partinfo.partitions[1].end}}"
+  - name: Grow partition
+    delegate_to: target
+    ansible.builtin.shell:
+      cmd: growpart /dev/vda 2
+    when: gap_kb|int > 1024
+  - name: Resize partition
+    delegate_to: target
+    community.general.filesystem:
+      fstype: ext4
+      dev: /dev/vda2
+      resizefs: true
+    when: gap_kb|int > 1024
+  - name: Change root password
+    delegate_to: target
+    ansible.builtin.user:
+      name: root
+      update_password: always
+      password: "{{ newpassword|password_hash('sha512') }}"
+  - name: Change hostname
+    delegate_to: target
+    ansible.builtin.hostname:
+      name: "{{ newhostname }}"

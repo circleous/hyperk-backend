@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:14-bullseye
+    ports:
+      - 127.0.0.1:5432:5432
+    environment:
+      POSTGRES_USER: hyperk
+      POSTGRES_PASSWORD: hyperk
+
+  redis:
+    image: redis:7-bullseye
+    ports:
+      - 127.0.0.1:6379:6379

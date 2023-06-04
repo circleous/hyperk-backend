@@ -1,0 +1,40 @@
+env: development
+
+# Connection
+libvirt: qemu:///system
+db: sqlite+aiosqlite:///db.sqlite3
+
+# OAuth
+oauth:
+  provider: google
+  client_id: CHANGE_ME
+  client_secret: CHANGE_ME
+
+# Libvirt Instances setting
+maxvcpus: 4
+maxram: 8GB
+
+session_secret: very-secret-session-key
+jwt_secret: very-secret-jwt-key
+
+# Network
+network:
+  # mode: bridge
+  # interface: br0
+  # subnet: 10.10.10.0/24
+
+  mode: nat
+  interface: vibr0
+  subnet: 192.168.122.0/24
+
+# Base Images
+images:
+  ubuntu-20.04:
+    path: /var/lib/libvirt/images/packer-generic
+    root_password: ubuntu
+  ubuntu-22.04:
+    path: /var/lib/libvirt/images/packer-generic
+    root_password: ubuntu
+  debian-11:
+    path: /var/lib/libvirt/images/packer-generic
+    root_password: debian

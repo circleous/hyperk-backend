@@ -20,6 +20,14 @@ class InstanceUpdateNameResponse(InstanceSchema):
     pass
 
 
+class InstanceStateRequest(BaseModel):
+    state: Literal["start", "poweroff", "pause"]
+
+
+class InstanceStateResponse(BaseModel):
+    state: Literal["start", "poweroff", "pause"]
+
+
 class InstanceCreateRequest(BaseModel):
     name: str
     os: str

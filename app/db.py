@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -23,7 +23,7 @@ async_session = async_sessionmaker(
     future=True,
 )
 
-virtmanager = Virt(config.libvirt, VirtMode.READ | VirtMode.WRITE)
+virtmanager: Optional[Virt] = None
 
 
 async def get_session() -> AsyncIterator[async_sessionmaker]:

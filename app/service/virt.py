@@ -31,6 +31,9 @@ class Virt:
     def get_vm_by_name(self, name: str) -> libvirt.virDomain:
         return self.conn.lookupByName(name)
 
+    def get_vm_by_id(self, id: UUID) -> libvirt.virDomain:
+        return self.conn.lookupByUUIDString(str(id))
+
     def get_vms(self) -> List[libvirt.virDomain]:
         return self.conn.listAllDomains()
 

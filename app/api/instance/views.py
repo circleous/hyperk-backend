@@ -11,8 +11,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.authentication import requires
 
+import app.db
 from app.db import get_session
-from app.db import virtmanager
 from app.models.instances import Instance
 from app.models.instances import InstanceSchema
 from app.models.users import User
@@ -21,11 +21,14 @@ from app.settings import config
 
 from .schemas import InstanceCreateRequest
 from .schemas import InstanceListResponse
+from .schemas import InstanceStateRequest
+from .schemas import InstanceStateResponse
 from .schemas import InstanceUpdateNameRequest
 from .schemas import InstanceUpdateNameResponse
 from .use_cases import InstanceDetail
 from .use_cases import InstanceList
 from .use_cases import InstanceUpdateName
+from .use_cases import InstanceUpdateState
 
 router = APIRouter(prefix="/instances", tags=["instance"])
 
@@ -43,7 +46,7 @@ async def list_instances(
 
 @router.get("/{instance_id}", response_model=InstanceSchema)
 @requires(["authenticated"])
-async def update_instance_name(
+async def get_instance(
         request: Request,
         instance_id: UUID = Path(description="id of instance"),
         use_case: InstanceDetail = Depends(InstanceDetail),
@@ -62,6 +65,17 @@ async def update_instance_name(
 ) -> InstanceUpdateNameResponse:
     instance = await use_case.execute(instance_id, data.name, request.user)
     return InstanceUpdateNameResponse(id=instance.id, name=instance.name)
+
+
+@router.post("/{instance_id}/state")
+@requires(["authenticated"])
+async def update_state(
+    request: Request,
+    data: InstanceStateRequest,
+    instance_id: UUID = Path(description="id of instance"),
+    use_case: InstanceUpdateState = Depends(InstanceUpdateState),
+) -> InstanceStateResponse:
+    return await use_case.execute(instance_id, data.state)
 
 
 @router.post("/create")
@@ -128,7 +142,7 @@ async def createvm(user: UserSchema,
         hostname,
     ])
 
-    domain = virtmanager.get_vm_by_name(name)
+    domain = app.db.virtmanager.get_vm_by_name(name)
 
     session_maker = await anext(get_session())
 

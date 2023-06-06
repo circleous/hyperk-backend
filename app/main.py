@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from http import HTTPStatus
 
 from fastapi import APIRouter
@@ -8,15 +9,27 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.auth.views import router as auth_router
 from app.api.instance.views import router as instance_router
+import app.db as db
 from app.middleware.auth import AuthenticationBackend
 from app.middleware.auth import AuthenticationMiddleware
+from app.service.virt import Virt
+from app.service.virt import VirtMode
 from app.settings import config
 
-app = FastAPI(
-    title="hyperk",
-    docs_url="/docs",
-    redoc_url=None,
-)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.virtmanager = Virt(config.libvirt, VirtMode.READ | VirtMode.WRITE)
+
+    yield
+
+    db.virtmanager.conn.close()
+
+
+app = FastAPI(title="hyperk",
+              docs_url="/docs",
+              redoc_url=None,
+              lifespan=lifespan)
 
 app.add_middleware(
     SessionMiddleware,

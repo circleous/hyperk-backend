@@ -10,14 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.db
 from app.db import get_session
-from app.db import virtmanager
 from app.models import Instance
 from app.models import InstanceSchema
 from app.models import User
 from app.models import UserSchema
 
 from .schemas import InstanceCreateRequest
+from .schemas import InstanceStateResponse
 
 AsyncSessionMaker = Annotated[async_sessionmaker, Depends(get_session)]
 
@@ -25,7 +26,7 @@ AsyncSessionMaker = Annotated[async_sessionmaker, Depends(get_session)]
 def transform_domain(domain: libvirt.virDomain) -> InstanceSchema:
     name = domain.name()
     uuid = UUID(domain.UUIDString())
-    state, _ = domain.state()
+    state, max_mem, mem, vcpu, time = domain.info()
     if state == libvirt.VIR_DOMAIN_RUNNING:
         state = "running"
         vcpu = domain.maxVcpus()
@@ -36,9 +37,11 @@ def transform_domain(domain: libvirt.virDomain) -> InstanceSchema:
         if len(iface) > 0:
             _, val = iface[0]
             ip = val["addrs"][0]["addr"]
+        else:
+            ip = ""
     else:
-        ram = -1
-        vcpu = -1
+        ram = int(max_mem)
+        vcpu = int(vcpu)
         ip = ""
         state = "off"
     return InstanceSchema(id=uuid,
@@ -58,7 +61,7 @@ class InstanceList:
         self.dbsession = session
 
     async def execute(self, user: UserSchema) -> AsyncIterator[InstanceSchema]:
-        domains = virtmanager.get_vms()
+        domains = app.db.virtmanager.get_vms()
         for domain in domains:
             yield transform_domain(domain)
 
@@ -72,7 +75,7 @@ class InstanceDetail:
         self.dbsession = session
 
     async def execute(self, id: UUID, user: UserSchema) -> InstanceSchema:
-        domain = virtmanager.conn.lookupByUUID(id.bytes)
+        domain = app.db.virtmanager.conn.lookupByUUID(id.bytes)
         return transform_domain(domain)
 
 
@@ -97,3 +100,29 @@ class InstanceUpdateName:
             await instance.update_name(session, new_name)
             await session.refresh(instance)
         return InstanceSchema.from_orm(instance)
+
+
+class InstanceUpdateState:
+
+    def __init__(
+        self,
+        session: AsyncSessionMaker,
+    ) -> None:
+        self.dbsession = session
+
+    async def execute(self, id: UUID, state: str) -> InstanceStateResponse:
+        dom = app.db.virtmanager.get_vm_by_id(id)
+
+        if dom is None:
+            raise HTTPException(HTTPStatus.NOT_FOUND, "Invalid Instance ID")
+
+        if state == "start":
+            dom.create()
+        elif state == "poweroff":
+            dom.destroy()
+        elif state == "pause":
+            dom.managedSave()
+        else:
+            raise HTTPException(HTTPStatus.BAD_REQUEST, "Unhandled state")
+
+        return InstanceStateResponse(state=state)

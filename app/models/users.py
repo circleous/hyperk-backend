@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator, Optional
 
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 from sqlalchemy import Boolean
 from sqlalchemy import select
 from sqlalchemy import String
@@ -79,6 +79,4 @@ class UserSchema(BaseModel):
     id: int
     username: str
     realname: str
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

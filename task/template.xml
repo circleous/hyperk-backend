@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<domain type="kvm">
+<domain type="hvf">
     <name>{name}</name>
     <memory unit="{ram_unit}">{ram}</memory>
     <vcpu placement="static">{vcpu}</vcpu>
@@ -10,17 +10,13 @@
     <devices>
         <disk type="file" device="disk">
             <driver name="qemu" type="qcow2" />
-            <source file="/var/lib/libvirt/images/{name}" />
+            <source file="/usr/local/var/lib/libvirt/images/{name}" />
             <target dev="vda" bus="virtio" />
         </disk>
-        <interface type="network">
-            <mac address="{mac}" />
-            <source network="default" />
-            <model type="virtio" />
-        </interface>
-        <graphics type="spice" autoport="yes">
-            <listen type="address"/>
-            <image compression="off"/>
-        </graphics>
+        <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'/>
     </devices>
+    <qemu:commandline>
+        <qemu:arg value='-netdev vmnet-bridged,id=vnet,ifname=en0' />
+        <qemu:arg value='-device virtio-net-pci,netdev=vnet,addr=0x3' />
+    </qemu:commandline>
 </domain>

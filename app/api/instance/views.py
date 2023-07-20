@@ -1,6 +1,6 @@
 from http import HTTPStatus
+from typing import Annotated, Optional
 from uuid import UUID
-from uuid import uuid4
 
 from fastapi import APIRouter
 from fastapi import BackgroundTasks
@@ -11,13 +11,14 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.authentication import requires
 
-import app.db
 from app.db import get_session
+from app.db import get_virt
 from app.models.instances import Instance
 from app.models.instances import InstanceSchema
 from app.models.users import User
 from app.models.users import UserSchema
-from app.settings import config
+from app.settings import Config
+from app.settings import get_config
 
 from .schemas import InstanceCreateRequest
 from .schemas import InstanceListResponse
@@ -34,43 +35,42 @@ router = APIRouter(prefix="/instances", tags=["instance"])
 
 
 @router.get("", response_model=InstanceListResponse)
-@requires(["authenticated"])
 async def list_instances(
         request: Request,
         use_case: InstanceList = Depends(InstanceList),
 ) -> InstanceListResponse:
     return InstanceListResponse(instances=[
-        instance async for instance in use_case.execute(request.user)
+        instance async for instance in use_case.execute(request.scope["user"])
     ])
 
 
 @router.get("/{instance_id}", response_model=InstanceSchema)
-@requires(["authenticated"])
 async def get_instance(
         request: Request,
         instance_id: UUID = Path(description="id of instance"),
         use_case: InstanceDetail = Depends(InstanceDetail),
 ) -> InstanceSchema:
-    instance = await use_case.execute(instance_id, request.user)
+    instance = await use_case.execute(instance_id, request.scope["user"])
     return instance
 
 
 @router.put("/{instance_id}", response_model=InstanceUpdateNameResponse)
-@requires(["authenticated"])
 async def update_instance_name(
     request: Request,
     data: InstanceUpdateNameRequest,
     instance_id: UUID = Path(description="id of instance"),
     use_case: InstanceUpdateName = Depends(InstanceUpdateName),
 ) -> InstanceUpdateNameResponse:
-    instance = await use_case.execute(instance_id, data.name, request.user)
+    instance = await use_case.execute(
+        instance_id,
+        data.name,
+        request.scope["user"],
+    )
     return InstanceUpdateNameResponse(id=instance.id, name=instance.name)
 
 
 @router.post("/{instance_id}/state")
-@requires(["authenticated"])
 async def update_state(
-    request: Request,
     data: InstanceStateRequest,
     instance_id: UUID = Path(description="id of instance"),
     use_case: InstanceUpdateState = Depends(InstanceUpdateState),
@@ -79,10 +79,10 @@ async def update_state(
 
 
 @router.post("/create")
-@requires(["authenticated"])
 async def create_instance(
     request: Request,
     data: InstanceCreateRequest,
+    config: Annotated[Config, Depends(get_config)],
     task: BackgroundTasks,
 ) -> JSONResponse:
     base_image = config.images.get(data.os)
@@ -95,7 +95,7 @@ async def create_instance(
 
     task.add_task(
         createvm,
-        user=request.user,
+        user=request.scope["user"],
         name=data.name,
         vcpu=data.vcpu,
         ram=f"{data.ram}{data.ram_unit}",
@@ -111,14 +111,16 @@ async def create_instance(
     )
 
 
-async def createvm(user: UserSchema,
-                   name,
-                   vcpu,
-                   ram,
-                   size,
-                   os,
-                   new_password,
-                   hostname=None):
+async def createvm(
+    user: UserSchema,
+    name: str,
+    vcpu: int,
+    ram: str,
+    size: int,
+    os: str,
+    new_password: str,
+    hostname: Optional[str] = None,
+) -> None:
     import subprocess
 
     if hostname is None:
@@ -142,12 +144,22 @@ async def createvm(user: UserSchema,
         hostname,
     ])
 
-    domain = app.db.virtmanager.get_vm_by_name(name)
+    virt = get_virt()
 
-    session_maker = await anext(get_session())
+    domain = virt.get_vm_by_name(name)
+
+    session_maker = await get_session().__anext__()
 
     async with session_maker() as session:
         user_obj = await User.get_by_id(session, user.id)
-        ins = await Instance.create(session, UUID(str(domain.UUIDString())),
-                                    name, user_obj)
+        if not user_obj:
+            return
+
+        await Instance.create(
+            session,
+            UUID(str(domain.UUIDString())),
+            name,
+            user_obj,
+        )
+
         await session.flush()

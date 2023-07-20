@@ -37,12 +37,15 @@ class Virt:
     def get_vms(self) -> List[libvirt.virDomain]:
         return self.conn.listAllDomains()
 
-    def define_vm(self, xml) -> libvirt.virDomain:
+    def define_vm(self, xml: str) -> libvirt.virDomain:
         if not (self.mode & VirtMode.WRITE):
             raise RuntimeError(
                 "tying to write access while VirtConnect are read only mode")
         domain = self.conn.defineXML(xml)
         return domain
+
+    def close(self) -> None:
+        self.conn.close()
 
 
 if __name__ == "__main__":

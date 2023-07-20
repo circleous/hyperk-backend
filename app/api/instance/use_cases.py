@@ -1,26 +1,27 @@
 from http import HTTPStatus
 from typing import Annotated, AsyncIterator
 from uuid import UUID
-from uuid import uuid4
 
 from fastapi import Depends
 from fastapi import HTTPException
 import libvirt
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.db
 from app.db import get_session
+from app.db import get_virt
 from app.models import Instance
 from app.models import InstanceSchema
 from app.models import User
 from app.models import UserSchema
+from app.service.virt import Virt
 
 from .schemas import InstanceCreateRequest
 from .schemas import InstanceStateResponse
 
-AsyncSessionMaker = Annotated[async_sessionmaker, Depends(get_session)]
+AsyncSessionMaker = Annotated[async_sessionmaker[AsyncSession],
+                              Depends(get_session)]
 
 
 def transform_domain(domain: libvirt.virDomain) -> InstanceSchema:
@@ -57,11 +58,13 @@ class InstanceList:
     def __init__(
         self,
         session: AsyncSessionMaker,
+        virt: Annotated[Virt, Depends(get_virt)],
     ) -> None:
         self.dbsession = session
+        self.virt = virt
 
     async def execute(self, user: UserSchema) -> AsyncIterator[InstanceSchema]:
-        domains = app.db.virtmanager.get_vms()
+        domains = self.virt.get_vms()
         for domain in domains:
             yield transform_domain(domain)
 
@@ -71,11 +74,13 @@ class InstanceDetail:
     def __init__(
         self,
         session: AsyncSessionMaker,
+        virt: Annotated[Virt, Depends(get_virt)],
     ) -> None:
         self.dbsession = session
+        self.virt = virt
 
     async def execute(self, id: UUID, user: UserSchema) -> InstanceSchema:
-        domain = app.db.virtmanager.conn.lookupByUUID(id.bytes)
+        domain = self.virt.conn.lookupByUUID(id.bytes)
         return transform_domain(domain)
 
 
@@ -88,11 +93,11 @@ class InstanceUpdateName:
         self.dbsession = session
 
     async def execute(self, id: UUID, new_name: str,
-                      user: UserSchema) -> Instance:
+                      user: UserSchema) -> InstanceSchema:
         async with self.dbsession() as session:
             instance = await Instance.get_by_id(session, id)
             user_obj = await User.get_by_id(session, user.id)
-            if not instance:
+            if not instance or not user_obj:
                 raise HTTPException(HTTPStatus.NOT_FOUND, "Invalid Instance ID")
             if instance.user_id != user.id and not user_obj.is_admin:
                 raise HTTPException(HTTPStatus.UNAUTHORIZED,
@@ -107,11 +112,13 @@ class InstanceUpdateState:
     def __init__(
         self,
         session: AsyncSessionMaker,
+        virt: Annotated[Virt, Depends(get_virt)],
     ) -> None:
         self.dbsession = session
+        self.virt = virt
 
     async def execute(self, id: UUID, state: str) -> InstanceStateResponse:
-        dom = app.db.virtmanager.get_vm_by_id(id)
+        dom = self.virt.get_vm_by_id(id)
 
         if dom is None:
             raise HTTPException(HTTPStatus.NOT_FOUND, "Invalid Instance ID")

@@ -1,6 +1,6 @@
 fastapi==0.95.0
 uvicorn[standard]==0.21.1
-redis[hiredis]>=4.5.3
+redis[hiredis]==4.5.3
 
 # http client
 httpx==0.23.3

@@ -1,20 +1,27 @@
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from http import HTTPStatus
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends
 from fastapi import HTTPException
+import jwt
 from requests_oauthlib import OAuth2Session
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.models import User
-from app.service.jwtoken import JWToken
-from app.settings import config
+from app.security.auth import JWTPayload
+from app.settings import Config
+from app.settings import get_config
 
 from .schemas import AuthLoginResponse
 from .schemas import GoogleUser
 
-AsyncSession = Annotated[async_sessionmaker, Depends(get_session)]
+config = get_config()
 
 OAUTH_CONFIG = {
     "GOOGLE": {
@@ -53,18 +60,23 @@ class AuthGoogleCallback:
 
     def __init__(
         self,
-        session: AsyncSession,
+        session: Annotated[async_sessionmaker[AsyncSession],
+                           Depends(get_session)],
+        config: Annotated[Config, Depends(get_config)],
     ) -> None:
         self.dbsession = session
+        self.config = config
         self.oauth = OAuth2Session(
             client_id=config.oauth.client_id,
             redirect_uri="postmessage",
         )
 
     async def execute(self, code: str) -> AuthLoginResponse:
-        _ = self.oauth.fetch_token(OAUTH_CONFIG["GOOGLE"]["TOKEN_URL"],
-                                   code,
-                                   client_secret=config.oauth.client_secret)
+        _ = self.oauth.fetch_token(
+            OAUTH_CONFIG["GOOGLE"]["TOKEN_URL"],
+            code,
+            client_secret=self.config.oauth.client_secret,
+        )
 
         res = self.oauth.get(OAUTH_CONFIG["GOOGLE"]["USERINFO_URL"])
         data: GoogleUser = res.json()
@@ -72,11 +84,27 @@ class AuthGoogleCallback:
         async with self.dbsession() as session:
             user = await User.get_by_username(session, data["email"])
             if user is None:
-                user = await User.create(session,
-                                         username=data["email"],
-                                         realname=data["name"],
-                                         is_admin=False)
+                user = await User.create(
+                    session,
+                    username=data["email"],
+                    realname=data["name"],
+                    is_admin=False,
+                )
 
-        token = JWToken.encode(user.username)
+        now = datetime.now(timezone.utc)
+        payload: JWTPayload = {
+            "iss": self.config.base_url,
+            "sub": user.username,
+            "iat": int(now.timestamp()),
+            "nbf": int(now.timestamp()),
+            "exp": int((now + timedelta(days=1)).timestamp()),
+            "jti": str(uuid4()),
+        }
+
+        token = jwt.encode(
+            payload=payload,  # type: ignore
+            key=self.config.jwt_secret,
+            algorithm="HS512",
+        )
 
         return AuthLoginResponse(token_type="bearer", access_token=token)

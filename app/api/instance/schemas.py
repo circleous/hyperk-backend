@@ -16,8 +16,9 @@ class InstanceUpdateNameRequest(InstanceSchema):
     pass
 
 
-class InstanceUpdateNameResponse(InstanceSchema):
-    pass
+class InstanceUpdateNameResponse(BaseModel):
+    id: UUID
+    name: str
 
 
 class InstanceStateRequest(BaseModel):
@@ -36,7 +37,7 @@ class InstanceCreateRequest(BaseModel):
     ram_unit: Literal["KiB", "MiB", "GiB"]
     size: int
     root_password: str
-    hostname: Optional[str]
+    hostname: Optional[str] = None
 
 
 class InstanceCreateResponse(BaseModel):

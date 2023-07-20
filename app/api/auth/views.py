@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from typing import Annotated
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -7,7 +8,8 @@ from fastapi import Request
 from fastapi.responses import Response
 from starlette.authentication import requires
 
-from app.settings import config
+from app.settings import Config
+from app.settings import get_config
 
 from .schemas import AuthGetUserResponse
 from .schemas import AuthLoginResponse
@@ -37,6 +39,7 @@ async def google_callback(
     request: Request,
     response: Response,
     code: str,
+    config: Annotated[Config, Depends(get_config)],
     use_case: AuthGoogleCallback = Depends(AuthGoogleCallback),
 ) -> AuthLoginResponse:
     if config.oauth.provider != "google":
@@ -56,6 +59,7 @@ async def google_callback(
 async def github_callback(
     request: Request,
     code: str,
+    config: Annotated[Config, Depends(get_config)],
     use_case: AuthGoogleCallback = Depends(AuthGoogleCallback),
 ) -> AuthLoginResponse:
     if config.oauth.provider != "github":
@@ -64,6 +68,5 @@ async def github_callback(
 
 
 @router.get("", response_model=AuthGetUserResponse)
-@requires(["authenticated"])
 async def get_user(request: Request) -> AuthGetUserResponse:
-    return request.user
+    return request.scope["user"]

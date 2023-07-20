@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Dict, Literal, Optional
 
 from pydantic import BaseModel
@@ -8,7 +9,7 @@ import yaml
 
 class NetworkConfig(BaseModel):
     mode: Literal["bridge", "nat"]
-    interface: Optional[str]
+    interface: Optional[str] = None
     subnet: IPvAnyNetwork
 
 
@@ -42,17 +43,19 @@ class Config(BaseModel):
     images: Dict[str, BaseImage]
 
     @property
-    def base_url(self):
+    def base_url(self) -> str:
         if self.env == "development":
             return "http://localhost:5173"
 
         raise NotImplementedError()
 
 
-def parse_config(path: str = "config.yaml"):
+def parse_config(path: str = "config.yaml") -> Config:
     with open("config.yaml", "r") as f:
         o = yaml.safe_load(f)
-    return Config.parse_obj(o)
+    return Config.model_validate(o)
 
 
-config = parse_config()
+@lru_cache
+def get_config() -> Config:
+    return parse_config()

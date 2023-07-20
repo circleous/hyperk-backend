@@ -4,7 +4,7 @@ from ipaddress import ip_address
 from typing import Literal, Optional, TYPE_CHECKING
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import select
@@ -73,10 +73,8 @@ class Instance(Base):
 class InstanceSchema(BaseModel):
     id: UUID
     name: str
-    ip: Optional[str]
+    ip: Optional[str] = None
     ram: str
     vcpu: int
     state: Literal["running", "off", "paused"]
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

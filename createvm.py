@@ -13,7 +13,7 @@ import libvirt
 
 from app.service.virt import Virt
 from app.service.virt import VirtMode
-from app.settings import config
+from app.settings import get_config
 
 
 class Namespace(argparse.Namespace):
@@ -55,7 +55,7 @@ def gen_inventory(file, ip, password):
 
 
 def create_image(os, size, name):
-    target = f"/var/lib/libvirt/images/{name}"
+    target = f"/usr/local/var/lib/libvirt/images/{name}"
     shutil.copyfile(os.path, target)
     check_call(["qemu-img", "resize", target, size])
 
@@ -73,6 +73,8 @@ def wait_for_ssh(host: str = 'localhost', timeout: float = 5.0):
 def main(args: Namespace):
     virt = Virt("qemu:///system", VirtMode.READ | VirtMode.WRITE)
 
+    config = get_config()
+
     os = config.images.get(args.os)
     if os is None:
         print("OS NOT FOUND")
@@ -83,11 +85,13 @@ def main(args: Namespace):
     ram = args.ram[:-3]
     ram_unit = args.ram[-3:]
 
-    xml = create_xml(name=args.name,
-                     ram_unit=ram_unit,
-                     ram=ram,
-                     vcpu=args.vcpu,
-                     mac=gen_mac())
+    xml = create_xml(
+        name=args.name,
+        ram_unit=ram_unit,
+        ram=ram,
+        vcpu=args.vcpu,
+        mac=gen_mac(),
+    )
 
     domain = virt.define_vm(xml)
     domain.create()
